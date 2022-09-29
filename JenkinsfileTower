@@ -124,9 +124,9 @@ stage('Deploy') {
         ansibleTower(
                 towerServer: 'tower',
                 templateType: 'workflow',
-                jobTemplate: '${templateId}',
+                jobTemplate: "${templateId}",
                 importTowerLogs: true,
-                inventory: '${inventoryId}',
+                inventory: "${inventoryId}",
                 removeColor: false,
                 verbose: true,
                 limit: "${hostLimit}",
