@@ -90,7 +90,7 @@ if(FULL_BUILD) {
                 groupId: "${pom.groupId}", 
                 nexusUrl: NEXUS_URL, 
                 nexusVersion: 'nexus3', 
-                protocol: 'http', 
+                protocol: 'https', 
                 repository: NEXUS_REPO, 
                 version: "${pom.version}"        
         }
