@@ -10,51 +10,36 @@ final NEXUS_REPO = 'maven-releases'
 final TEMPLATE_ID = params.TEMPLATE_ID
 final INVENTORY_ID = params.INVENTORY_ID
 
-stages {
+node {
     stage('Build') {
-        node {
-            git GIT_URL
-            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-                if(FULL_BUILD) {
-                    def pom = readMavenPom file: 'pom.xml'
-                    sh "mvn -B versions:set -DnewVersion=${pom.version}-${BUILD_NUMBER}"
-                    sh "mvn -B -Dmaven.test.skip=true clean package"
-                    stash name: "artifact", includes: "target/soccer-stats-*.war"
-                }
+        git GIT_URL
+        withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+            def pom = readMavenPom file: 'pom.xml'
+            sh "mvn -B versions:set -DnewVersion=${pom.version}-${BUILD_NUMBER}"
+            sh "mvn -B -Dmaven.test.skip=true clean package"
+            stash name: "artifact", includes: "target/soccer-stats-*.war"
             }
         }
+
+    stage('Unit Tests') {   
+        sh "mvn -B clean test"
+        stash name: "unit_tests", includes: "target/surefire-reports/**"
+        }
+
+    stage('Integration Tests') {
+        sh "mvn -B clean verify -Dsurefire.skip=true"
+        stash name: 'it_tests', includes: 'target/failsafe-reports/**'
+        }
+
+
+    stage('Static Analysis') {
+        withSonarQubeEnv('sonar'){
+            unstash 'it_tests'
+            unstash 'unit_tests'
+            sh 'mvn sonar:sonar -DskipTests'
+            stash name: "pom", includes: "pom.xml"
+        }
     }
-
-   stage('Unit Tests') {   
-       node {
-           withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-               sh "mvn -B clean test"
-               stash name: "unit_tests", includes: "target/surefire-reports/**"
-           }
-       }
-   }
-
-   stage('Integration Tests') {
-       node {
-           withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-               sh "mvn -B clean verify -Dsurefire.skip=true"
-               stash name: 'it_tests', includes: 'target/failsafe-reports/**'
-           }
-       }
-   }
-
-   stage('Static Analysis') {
-       node {
-           withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-               withSonarQubeEnv('sonar'){
-                   unstash 'it_tests'
-                   unstash 'unit_tests'
-                   sh 'mvn sonar:sonar -DskipTests -Dsonar.projectKey=soccer-stats'
-                   stash name: "pom", includes: "pom.xml"
-               }
-           }
-       }
-   }
 }
 
 
