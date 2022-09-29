@@ -26,30 +26,32 @@ stage('Build') {
            unitTest: {
                stage('Unit Test') {
                    catchError {
-                       mvn 'test'
+                       sh "mvn -B clean test"
                    }
                    junit allowEmptyResults: true, testResults: '**/target/surefire-reports/TEST-*.xml'
                }
-           },
-           integrationTest: {
-               stage('Integration Test') {
-                   if (isTimeTriggeredBuild()) {
-                       catchError {
-                           mvn 'verify -DskipUnitTests -Parq-wildfly-swarm '
-                       }
-                       junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/*.xml'
-                   }
-               }
-           }
+            },
+            integrationTest: {
+                stage('Integration Test') {
+                    catchError {
+                        sh "mvn -B clean verify -DskipUnitTests -Parq-wildfly-swarm"
+                    }
+                    junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/*.xml'
+                }
+            }
         )
+    }
+}
 
-        stage('Statical Code Analysis') {
-           withSonarQubeEnv('sonar') {
-               sh 'mvn clean package sonar:sonar'
-           }
+
+if(FULL_BUILD) {
+    stage('Statical Code Analysis') {
+        withSonarQubeEnv('sonar') {
+            sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=soccer-stats'
         }
     }
 }
+
 
 if(FULL_BUILD) {
     stage('Quality Gate') {
@@ -63,6 +65,7 @@ if(FULL_BUILD) {
           }
       }
 }
+
 
 if(FULL_BUILD) {
     stage('Approval') {
