@@ -1,13 +1,4 @@
 ---
-- name: Install Roles from Galaxy
-  hosts: localhost
-  connection: local
-  become_user: "{{ local_user | default('awx') }}"
-  become: yes
-  tasks:
-    - name: installing ansible-galaxy roles
-      command: ansible-galaxy install -r requirements.yml --roles-path roles
-
 - name: Install Java
   hosts: app_server
   become: yes
