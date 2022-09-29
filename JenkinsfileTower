@@ -7,8 +7,8 @@ final HOST_PROVISION = params.HOST_PROVISION
 final GIT_URL = params.GIT_URL
 final NEXUS_URL = params.NEXUS_URL
 final NEXUS_REPO = 'maven-releases'
-final.TEMPLATE_ID = params.TEMPLATE_ID
-final.INVENTORY_ID = params.INVENTORY_ID
+final TEMPLATE_ID = params.TEMPLATE_ID
+final INVENTORY_ID = params.INVENTORY_ID
 
 stage('Build') {
     node {
