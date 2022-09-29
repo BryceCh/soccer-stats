@@ -4,9 +4,11 @@
 final FULL_BUILD = params.FULL_BUILD
 // HOST_PROVISION -> server to run ansible based on provision/inventory.ini
 final HOST_PROVISION = params.HOST_PROVISION
-
-final GIT_URL = 'https://github.com/ricardozanini/soccer-stats.git'
-final NEXUS_URL = 'nexus.local:8081'
+final GIT_URL = params.GIT_URL
+final NEXUS_URL = params.NEXUS_URL
+final NEXUS_REPO = 'maven-releases'
+final TEMPLATE_ID = params.TEMPLATE_ID
+final INVENTORY_ID = params.INVENTORY_ID
 
 stage('Build') {
     node {
@@ -17,45 +19,48 @@ stage('Build') {
                 sh "mvn -B versions:set -DnewVersion=${pom.version}-${BUILD_NUMBER}"
                 sh "mvn -B -Dmaven.test.skip=true clean package"
                 stash name: "artifact", includes: "target/soccer-stats-*.war"
+                stash name: "pom", includes: "pom.xml"
             }
         }
+        parallel(
+           unitTest: {
+               stage('Unit Test') {
+                   catchError {
+                       mvn 'test'
+                   }
+                   junit allowEmptyResults: true, testResults: '**/target/surefire-reports/TEST-*.xml'
+               }
+           },
+           integrationTest: {
+               stage('Integration Test') {
+                   if (isTimeTriggeredBuild()) {
+                       catchError {
+                           mvn 'verify -DskipUnitTests -Parq-wildfly-swarm '
+                       }
+                       junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/*.xml'
+                   }
+               }
+           }
+        )
+
+        stage('Statical Code Analysis') {
+           withSonarQubeEnv('sonar') {
+               sh 'mvn clean package sonar:sonar'
+           }
+        }
     }
-}
 
 if(FULL_BUILD) {
-    stage('Unit Tests') {   
-        node {
-            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-                sh "mvn -B clean test"
-                stash name: "unit_tests", includes: "target/surefire-reports/**"
-            }
-        }
-    }
-}
-
-if(FULL_BUILD) {
-    stage('Integration Tests') {
-        node {
-            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-                sh "mvn -B clean verify -Dsurefire.skip=true"
-                stash name: 'it_tests', includes: 'target/failsafe-reports/**'
-            }
-        }
-    }
-}
-
-if(FULL_BUILD) {
-    stage('Static Analysis') {
-        node {
-            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-                withSonarQubeEnv('sonar'){
-                    unstash 'it_tests'
-                    unstash 'unit_tests'
-                    sh 'mvn sonar:sonar -DskipTests'
-                }
-            }
-        }
-    }
+    stage('Quality Gate') {
+          if (currentBuild.currentResult == 'SUCCESS') {
+              timeout(time: 10, unit: 'MINUTES') {
+                  def qg = waitForQualityGate()
+                  if (qg.status != 'OK') {
+                      unstable("Pipeline unstable due to quality gate failure: ${qg.status}")
+                  }
+              }
+          }
+      }
 }
 
 if(FULL_BUILD) {
@@ -70,6 +75,7 @@ if(FULL_BUILD) {
 if(FULL_BUILD) {
     stage('Artifact Upload') {
         node {
+            unstash 'pom'
             unstash 'artifact'
 
             def pom = readMavenPom file: 'pom.xml'
@@ -86,8 +92,8 @@ if(FULL_BUILD) {
                 groupId: "${pom.groupId}", 
                 nexusUrl: NEXUS_URL, 
                 nexusVersion: 'nexus3', 
-                protocol: 'http', 
-                repository: 'ansible-meetup', 
+                protocol: 'https', 
+                repository: NEXUS_REPO, 
                 version: "${pom.version}"        
         }
     }
@@ -96,6 +102,7 @@ if(FULL_BUILD) {
 
 stage('Deploy') {
     node {
+        unstash 'pom'
         def pom = readMavenPom file: "pom.xml"
         def repoPath =  "${pom.groupId}".replace(".", "/") + 
                         "/${pom.artifactId}"
@@ -103,26 +110,29 @@ stage('Deploy') {
         def version = pom.version
 
         if(!FULL_BUILD) { //takes the last version from repo
-            sh "curl -o metadata.xml -s http://${NEXUS_URL}/repository/ansible-meetup/${repoPath}/maven-metadata.xml"
+            sh "curl -o metadata.xml -s http://${NEXUS_URL}/repository/${NEXUS_REPO}/${repoPath}/maven-metadata.xml"
             version = sh script: 'xmllint metadata.xml --xpath "string(//latest)"',
                          returnStdout: true
         }
-        def artifactUrl = "http://${NEXUS_URL}/repository/ansible-meetup/${repoPath}/${version}/${pom.artifactId}-${version}.war"
+        def artifactUrl = "https://${NEXUS_URL}/repository/${NEXUS_REPO}/${repoPath}/${version}/${pom.artifactId}-${version}.war"
+        def hostLimit = (HOST_PROVISION == "all" || HOST_PROVISION == null) ? "" : HOST_PROVISION
+        def inventoryId = INVENTORY_ID
+        def templateId = TEMPLATE_ID
 
-        withEnv(["ARTIFACT_URL=${artifactUrl}", "APP_NAME=${pom.artifactId}"]) {
-            echo "The URL is ${env.ARTIFACT_URL} and the app name is ${env.APP_NAME}"
-
-            // install galaxy roles
-            sh "ansible-galaxy install -vvv -r provision/requirements.yml -p provision/roles/"        
-
-            ansiblePlaybook colorized: true, 
-            credentialsId: 'ssh-jenkins',
-            limit: "${HOST_PROVISION}",
-            installation: 'ansible',
-            inventory: 'provision/inventory.ini', 
-            playbook: 'provision/playbook.yml', 
-            sudo: true,
-            sudoUser: 'jenkins'
-        }
+        //you must specify your own ids
+        ansibleTower(
+                towerServer: 'tower',
+                templateType: 'workflow',
+                jobTemplate: "${templateId}",
+                importTowerLogs: true,
+                inventory: "${inventoryId}",
+                removeColor: false,
+                verbose: true,
+                limit: "${hostLimit}",
+                extraVars: """---
+ARTIFACT_URL:  "${artifactUrl}"
+APP_NAME: "${pom.artifactId}" 
+"""
+        )
     }
 }
