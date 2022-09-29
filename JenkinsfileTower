@@ -81,6 +81,7 @@ if(FULL_BUILD) {
             def pom = readMavenPom file: 'pom.xml'
             def file = "${pom.artifactId}-${pom.version}"
             def jar = "target/${file}.war"
+            stash name: "pom", includes: "pom.xml"
 
             sh "cp pom.xml ${file}.pom"
 
@@ -102,7 +103,7 @@ if(FULL_BUILD) {
 
 stage('Deploy') {
     node {
-        git GIT_URL
+        unstash 'pom'
         def pom = readMavenPom file: "pom.xml"
         def repoPath =  "${pom.groupId}".replace(".", "/") + 
                         "/${pom.artifactId}"
