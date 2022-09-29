@@ -102,6 +102,7 @@ if(FULL_BUILD) {
 
 stage('Deploy') {
     node {
+        git GIT_URL
         def pom = readMavenPom file: "pom.xml"
         def repoPath =  "${pom.groupId}".replace(".", "/") + 
                         "/${pom.artifactId}"
