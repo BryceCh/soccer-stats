@@ -49,6 +49,7 @@ stage('Build') {
            }
         }
     }
+}
 
 if(FULL_BUILD) {
     stage('Quality Gate') {
