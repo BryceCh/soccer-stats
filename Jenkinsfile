@@ -22,34 +22,44 @@ stage('Build') {
                 stash name: "pom", includes: "pom.xml"
             }
         }
-        parallel(
-           unitTest: {
-               stage('Unit Test') {
-                   catchError {
-                       sh "mvn -B clean test"
-                   }
-                   junit allowEmptyResults: true, testResults: '**/target/surefire-reports/TEST-*.xml'
-               }
-            },
-            integrationTest: {
-                stage('Integration Test') {
-                    catchError {
-                        sh "mvn -B clean verify -DskipUnitTests -Parq-wildfly-swarm"
-                    }
-                    junit allowEmptyResults: true, testResults: '**/target/failsafe-reports/*.xml'
-                }
-            }
-        )
     }
+}
+
+if(FULL_BUILD) {
+   stage('Unit Tests') {   
+       node {
+           withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+               sh "mvn -B clean test"
+               stash name: "unit_tests", includes: "target/surefire-reports/**"
+           }
+       }
+   }
+}
+
+if(FULL_BUILD) {
+   stage('Integration Tests') {
+       node {
+           withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+               sh "mvn -B clean verify -Dsurefire.skip=true"
+               stash name: 'it_tests', includes: 'target/failsafe-reports/**'
+           }
+       }
+   }
 }
 
 
 if(FULL_BUILD) {
-    stage('Statical Code Analysis') {
-        withSonarQubeEnv('sonar') {
-            sh 'mvn clean verify sonar:sonar -Dsonar.projectKey=soccer-stats'
-        }
-    }
+   stage('Static Analysis') {
+       node {
+           withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+               withSonarQubeEnv('sonar'){
+                   unstash 'it_tests'
+                   unstash 'unit_tests'
+                   sh 'mvn sonar:sonar -DskipTests -Dsonar.projectKey=soccer-stats'
+               }
+           }
+       }
+   }
 }
 
 
