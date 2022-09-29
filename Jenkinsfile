@@ -21,23 +21,28 @@ node {
             }
         }
 
-    stage('Unit Tests') {   
-        sh "mvn -B clean test"
-        stash name: "unit_tests", includes: "target/surefire-reports/**"
+    stage('Unit Tests') {
+        withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+            sh "mvn -B clean test"
+            stash name: "unit_tests", includes: "target/surefire-reports/**"
         }
+    }
 
     stage('Integration Tests') {
-        sh "mvn -B clean verify -Dsurefire.skip=true"
-        stash name: 'it_tests', includes: 'target/failsafe-reports/**'
+        withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+            sh "mvn -B clean verify -Dsurefire.skip=true"
+            stash name: 'it_tests', includes: 'target/failsafe-reports/**'
         }
-
+    }
 
     stage('Static Analysis') {
-        withSonarQubeEnv('sonar'){
-            unstash 'it_tests'
-            unstash 'unit_tests'
-            sh 'mvn sonar:sonar -DskipTests'
-            stash name: "pom", includes: "pom.xml"
+        withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+            withSonarQubeEnv('sonar'){
+                unstash 'it_tests'
+                unstash 'unit_tests'
+                sh 'mvn sonar:sonar -DskipTests -Dsonar.projectKey=soccer-stats'
+                stash name: "pom", includes: "pom.xml"
+            }
         }
     }
 }
