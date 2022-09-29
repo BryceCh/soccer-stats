@@ -10,22 +10,21 @@ final NEXUS_REPO = 'maven-releases'
 final TEMPLATE_ID = params.TEMPLATE_ID
 final INVENTORY_ID = params.INVENTORY_ID
 
-stage('Build') {
-    node {
-        git GIT_URL
-        withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
-            if(FULL_BUILD) {
-                def pom = readMavenPom file: 'pom.xml'
-                sh "mvn -B versions:set -DnewVersion=${pom.version}-${BUILD_NUMBER}"
-                sh "mvn -B -Dmaven.test.skip=true clean package"
-                stash name: "artifact", includes: "target/soccer-stats-*.war"
-                stash name: "pom", includes: "pom.xml"
+stages {
+    stage('Build') {
+        node {
+            git GIT_URL
+            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
+                if(FULL_BUILD) {
+                    def pom = readMavenPom file: 'pom.xml'
+                    sh "mvn -B versions:set -DnewVersion=${pom.version}-${BUILD_NUMBER}"
+                    sh "mvn -B -Dmaven.test.skip=true clean package"
+                    stash name: "artifact", includes: "target/soccer-stats-*.war"
+                }
             }
         }
     }
-}
 
-if(FULL_BUILD) {
    stage('Unit Tests') {   
        node {
            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
@@ -34,9 +33,7 @@ if(FULL_BUILD) {
            }
        }
    }
-}
 
-if(FULL_BUILD) {
    stage('Integration Tests') {
        node {
            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
@@ -45,10 +42,7 @@ if(FULL_BUILD) {
            }
        }
    }
-}
 
-
-if(FULL_BUILD) {
    stage('Static Analysis') {
        node {
            withEnv(["PATH+MAVEN=${tool 'm3'}/bin"]) {
@@ -56,6 +50,7 @@ if(FULL_BUILD) {
                    unstash 'it_tests'
                    unstash 'unit_tests'
                    sh 'mvn sonar:sonar -DskipTests -Dsonar.projectKey=soccer-stats'
+                   stash name: "pom", includes: "pom.xml"
                }
            }
        }
