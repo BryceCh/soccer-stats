@@ -19,6 +19,7 @@ stage('Build') {
                 sh "mvn -B versions:set -DnewVersion=${pom.version}-${BUILD_NUMBER}"
                 sh "mvn -B -Dmaven.test.skip=true clean package"
                 stash name: "artifact", includes: "target/soccer-stats-*.war"
+                stash name: "pom", includes: "pom.xml"
             }
         }
     }
@@ -74,6 +75,7 @@ if(FULL_BUILD) {
 if(FULL_BUILD) {
     stage('Artifact Upload') {
         node {
+            unstash 'pom'
             unstash 'artifact'
 
             def pom = readMavenPom file: 'pom.xml'
